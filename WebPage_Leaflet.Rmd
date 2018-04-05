@@ -11,7 +11,7 @@ library(leaflet)
 ```
 
 
-This is where I work
+This is where I work, in Santiago, Chile!
 
 
 ```{r, echo = FALSE}
