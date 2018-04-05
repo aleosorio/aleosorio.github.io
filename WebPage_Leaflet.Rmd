@@ -1,0 +1,23 @@
+---
+title: 'Peer-graded Assignment: R Markdown and Leaflet'
+author: "Alejandro Osorio"
+date: "April 4th, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(leaflet)
+```
+
+
+This is where I work
+
+
+```{r, echo = FALSE}
+my_place <- leaflet() %>%
+        addTiles() %>%
+        addMarkers(lat = -33.405587, lng = -70.572574, popup="Where Big Al works")
+my_place
+```
+
