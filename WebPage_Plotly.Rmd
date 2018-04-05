@@ -1,0 +1,25 @@
+---
+title: 'Peer-graded Assignment: R Markdown Presentation & Plotly'
+author: "Alejandro Osorio"
+date: "April 5th, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(plotly)
+data("mtcars")
+```
+
+CONTINUAR DESDE ACÁ, ENTENDIENDO QUE DEBE SER FORMATO PRESENTACIÓN, CON UN PLOTLY
+
+This is where I work, in Santiago, Chile!
+
+
+```{r, echo = FALSE}
+my_place <- leaflet() %>%
+        addTiles() %>%
+        addMarkers(lat = -33.405587, lng = -70.572574, popup="Where Big Al works")
+my_place
+```
+
