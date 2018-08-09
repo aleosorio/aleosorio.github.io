@@ -1,0 +1,357 @@
+---
+title: 'Practical Machine Learning: Course Project'
+author: "Alejandro Osorio"
+date: "August, 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+set.seed(123)
+```
+
+## Instructions
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+The goal of your project is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, in order to predict the manner in which they did the exercise (the "classe" variable in the training set). You may use any of the other variables to predict with.
+
+## Executive Summary
+
+### Model Selection
+
+Given the multiple-outcome-classification problem (more than 2 possible factor-type outcomes, as the 'classe' variable consists of 5 possible factor values -A, B, C, D, E-), the following model types were tried separately.
+
+1. Penalized Multinomial Logistic Regression
+2. Trees
+3. Random Forests
+4. Boosting with Trees
+
+After obtaining results for each model, a final GAM model based on the combination of two of the previous ones (the ones with best accuracy) was also tested.
+
+### Data Splitting and Cross Validation
+
+The following three sets were created, using Random Subsampling:
+
+1. Building Data Set: 70% of the working dataset.  This set was sub divided again into:
+ * Training Set (70%)
+ * Testing Set (30%)
+2. Validation Set: 30% of the working dataset.
+
+The validation set was prepared for the final testing of the GAM based combination model.
+
+For further details on the steps taken and the obtained results, refer to Appendix 2: Data Splitting.
+
+### Feature Selection
+
+Feature selection was based on the following 2 criteria:
+
+1. Examining the variables available in the testing set.  All variables (100) with mainly NAs (100% each) in the testing set, were also discarded in the training set.  The resulting data sets went down to 59 columns each.  More details both on this point and on how the final data sets were obtained, in Appendix 1: Getting and Cleaning Data.
+2. Based on a p-value analysis on the coefficients of model 1 (Penalized Multinomial Logistic Regression), the final regressors were obtained for the rest of the models.  Further details on steps taken and final data set obtained, in Appendix 3: Selection of Regressors Through p-Values Analysis.
+
+### Error Type Selection
+
+Given the problem has more than two possible outcomes, plus the objective of the project, the main error type used for each model was Accuracy (below 90% was considered low).
+
+### Results Obtained
+
+Performance obtained by each model, with final features selected, was as follows:
+
+1. Multinomial Logistic Regression (Appendix 4.1): 67% accuracy.
+2. Trees (Appendix 4.2): 58% accuracy.
+3. Random Forests (Appendix 4.3): 99% accuracy.
+4. Boosting with Trees (Appendix 4.4): 96% accuracy.
+5. Combination of Predictors with GAM (Appendix 4.5): 48% accuracy.
+
+Model 5 didn't converge due to one of the predictor variables separating perfectly the values of the dependent variable (more details in Appendix 4.5). Therefore, the final selected model, tested again using the validation set, was Random Forest.  Its final attained accuracy was, again, 99% (Appendix 5).  Given that result, the quiz was answered using said model, obtaining a 95% final grade.
+
+## Appendix 1: Getting and Cleaning Data
+
+Training and testing sets were downloaded using read_csv function, with the 'na' parameter tweaked so that it also included "#DIV/0!" cases (besides the default "" and "NA" cases).  Additionally, first columns containing row numbers were eliminated from the obtained datasets.
+
+```{r, include=FALSE}
+origtrain <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na = c("", "NA", "#DIV/0!"))
+origtrain <- origtrain[,-1]
+origtest <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na = c("", "NA"))
+origtest <- origtest[,-1]
+```
+
+Next, columns from the testing set that included NAs, where identified and dimensioned the following way:
+
+```{r}
+table(colSums((is.na(origtest))))
+```
+
+Therefore, as all columns with NAs (100 in this case) had 100% NAs (20 each), those columns were removed both from the testing and training datasets.
+
+```{r}
+datacols <- names(which(colSums(is.na(origtest))!=0))
+origtest <- select(origtest, -datacols)
+origtrain <- select(origtrain, -datacols)
+```
+
+Then, a final row check for NAs was performed for the training set
+
+```{r}
+which(colSums(is.na(origtrain)) != 0)
+which(rowSums(is.na(origtrain)) != 0)
+```
+
+Finally, after removing the only row with the 3 remaining NAs from the training set, the obtained working set is checked for NAs for the last time:
+
+```{r}
+workingset <- origtrain[-which(rowSums(is.na(origtrain)) != 0),]
+anyNA(workingset)
+```
+
+The final working dataset, with no NAs, went down to the following dimensions (detailed structure of the obtained dataset can be seen in Appendix 1):
+
+```{r}
+dim(workingset)
+```
+
+Finally, the structure of the obtained training dataset was very similar to that of the testing set, but for the last column ('question' v/s 'classe').
+
+## Appendix 2: Data Splitting
+
+Step 1: Creating building and validation sets
+
+```{r}
+indbuild <- createDataPartition(workingset$classe, p = 0.7, list = FALSE)
+validata <- workingset[-indbuild,]
+buildata <- workingset[indbuild,]
+```
+
+Step 2: Creating training and testing sets, out of the building set
+
+```{r}
+indtrain <- createDataPartition(buildata$classe, p = 0.7, list = FALSE)
+training <- buildata[indtrain,]
+testing <- buildata[-indtrain,]
+```
+
+## Appendix 3: Selection of Regressors Through p-Values Analysis
+
+As mentioned earlier, a p-value analysis of a Penalized Multinomial Logistic Regression's coefficients was used in order to determine which potential regressors to discard from further analysis.
+
+### Training
+
+```{r, include=FALSE}
+modfitmlog <- train(classe ~ ., method = "multinom", data = training[,-c(1:6)])
+```
+
+Model used:
+
+```{r, echo=FALSE}
+modfitmlog$call
+```
+
+```{r, echo=FALSE}
+predmlog <- predict(modfitmlog, newdata = testing[,-c(1:6, 59)])
+```
+
+Just out of curiosity, the model's overall results with 100% of the potential regressors, was:
+
+```{r, echo=FALSE}
+confmatmlog <- confusionMatrix(predmlog, factor(testing$classe))
+confmatmlog$table
+confmatmlog$overall
+```
+
+Even though the obtained accuracy was considered low (below 90%), this model's main objective was to determine the regressors to use with the rest of models.  Therefore the following p-value analysis.
+
+### P-Values for feature selection
+
+#### T statistics
+
+Given the fact that null hypotheses consider coefficients equal to cero, the t statistics are just the estimates divided by their standard errors, as follows:
+
+```{r}
+modfitmlog_coef <- summary(modfitmlog)$coefficients
+modfitmlog_stderr <- summary(modfitmlog)$standard.errors
+tBetas <- modfitmlog_coef/modfitmlog_stderr
+```
+
+#### Degrees of freedom
+
+```{r}
+modfitmlog_edf <- modfitmlog$finalModel["edf"]
+n <- length(training$classe)
+df <- n - modfitmlog_edf[[1]]
+df
+```
+
+#### P values
+```{r}
+pBetas <- 2 * data.frame(pt(abs(tBetas), df = df, lower.tail = FALSE))
+```
+
+### Final feature selection
+
+Features eliminated due to high p-values for all possible outcome factors:
+```{r}
+lesscoeff <- select(pBetas, contains("gyros"))
+names(lesscoeff)
+```
+
+Therefore, the final formula to be used with all models, was the following:
+```{r}
+namelist <- names(training[, -c(1:6, 59)])
+lessfeatures <- reformulate(termlabels = namelist[-grep("gyro", namelist, value = FALSE)], response = 'classe')
+lessfeatures
+```
+
+## Appendix 4: Model Training and Performance Evaluation
+
+### Appendix 4.1: Multinomial Logistic Regression Model
+
+#### Model trained
+
+```{r, include=FALSE}
+modfitmlog2 <- train(lessfeatures, method = "multinom", data = training[, -c(1:6)])
+```
+
+```{r, echo=FALSE}
+modfitmlog2$call
+```
+
+#### Performance obtained
+
+```{r}
+predmlog2 <- predict(modfitmlog2, newdata = testing[,-c(1:6, 59)])
+confmatmlog2 <- confusionMatrix(predmlog2, factor(testing$classe))
+confmatmlog2$table
+confmatmlog2$overall
+```
+
+Interesting to note that almost the same performance was obtained with 12 less features than the original model.  Therefore, the remaining models were trained with these same regressors.
+
+###  Appendix 4.2: Predicting with Trees
+
+```{r, include=FALSE}
+modfittree <- train(lessfeatures, method = "rpart", data = training[,-c(1:6)])
+predtree <- predict(modfittree, newdata = testing[,-c(1:6, 59)])
+```
+
+#### Model trained
+
+```{r, echo=FALSE}
+modfittree$call
+```
+
+#### Performance obtained
+
+```{r}
+confmattree <- confusionMatrix(predtree, factor(testing$classe))
+confmattree$table
+confmattree$overall
+```
+
+It's worth noting that the Multinomial Logistic Regression model was almost ten percentage points more accurate than this one.  Just in case, training and predicting was repeated with this model, including all features and exactly the same result was obtained, thus showing so far a correct p-value analysis for regressor selection.
+
+### Appendix 4.3: Random Forest
+
+```{r, include=FALSE}
+modfitrf <- train(lessfeatures, method = "rf", data = training[,-c(1:6)])
+predrf <- predict(modfitrf, newdata = testing[,-c(1:6, 59)])
+```
+
+#### Model trained
+
+```{r, echo=FALSE}
+modfitrf$call
+```
+
+#### Performance obtained
+
+```{r}
+confmatrf <- confusionMatrix(predrf, factor(testing$classe))
+confmatrf$table
+confmatrf$overall
+```
+
+Excelent performance, with only the regressors selected post p-value analysis.
+
+### Appendix 4.4: Boosting With Trees
+
+```{r, include=FALSE}
+modfitgbm <- train(lessfeatures, method = "gbm", data = training[,-c(1:6)])
+predgbm <- predict(modfitgbm, newdata = testing[,-c(1:6, 59)])
+```
+
+#### Model trained
+
+```{r, echo=FALSE}
+modfitgbm$call
+```
+
+#### Performance obtained
+
+```{r}
+confmatgbm <- confusionMatrix(predgbm, factor(testing$classe))
+confmatgbm$table
+confmatgbm$overall
+```
+
+Finally, Random Forest obtained a better accuracy than this model.  Just in case, again, the same modelling was carried on with all possible regressors.  Almost the same results were obtained.  Therefore, p-value analysis was indeed a useful method for selecting final regressors in this problem.
+
+### Appendix 4.5: Combining Predictors
+
+Based on the accuracy obtained with each previous model, Random Forests and Boosting with Trees were chosen for this stage.
+
+#### Training data set
+
+```{r}
+dfpredcomb <- data.frame(predrf, predgbm, classe = factor(testing$classe))
+```
+
+The following data set for GAM training was obtained from each model's predictions ('rf' and 'gbm') plus the real results in the testing set ('real').
+
+```{r, echo=FALSE}
+str(dfpredcomb)
+```
+
+#### Model trained
+
+```{r, include=FALSE}
+modfitcomb <- train(classe ~ ., method = "gam", data = dfpredcomb)
+predcomb <- predict(modfitcomb, dfpredcomb[,-3])
+```
+
+```{r, echo=FALSE}
+modfitcomb$call
+```
+
+#### Performance obtained
+
+```{r}
+confmatcomb <- confusionMatrix(predcomb, factor(testing$classe))
+confmatcomb$table
+confmatcomb$overall
+```
+
+The warning message "fitted probabilities numerically 0 or 1 occurred" was generated for all combinations of predictors, besides de two presented here.  Additionally, it happened with methods 'gamLoess' and 'gamSpline'.  After some research, it means the function didn't converge due to one of the predictor variables separating perfectly the values of the dependent variable.
+
+Final model used, then, was Random Forest, with an accuracy of almost 99%.
+
+### Appendix 5: Final Model's Performance
+
+As said previously, due to non converging GAM combining model, the final model tested with Validation Data, was Random Forest.
+
+```{r, echo=FALSE}
+predrf_val <- predict(modfitrf, newdata = validata[,-c(1:6, 59)])
+```
+
+Final obtained performance:
+
+```{r}
+confmatrf_val <- confusionMatrix(predrf_val, factor(validata$classe))
+confmatrf_val$table
+confmatrf_val$overall
+```
+
+Good to see an accuracy of almost 99% was accomplished again.  Sweet odds for the quiz!
